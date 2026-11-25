@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import { buildDeviceRegistration } from './device-access.mjs';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 
 // Run only on a trusted administrator workstation, never on Android.
 const endpoint = 'https://sgp.cloud.appwrite.io/v1';
 const projectId = '6b0600f60013dd532f05';
+const databaseId = '6b06f1f7003b65907da2';
 const key = process.env.APPWRITE_ENROLLMENT_KEY;
 if (!key) throw new Error('Set APPWRITE_ENROLLMENT_KEY in the administrator environment.');
 if (!stdin.isTTY || !stdout.isTTY) throw new Error('Use an interactive private terminal.');
@@ -37,6 +39,7 @@ try {
   // Fresh, isolated account; never reuse a human or existing device account.
   userId = randomUUID();
   await request('/users', { userId, name: 'Device: ' + label });
+  await request('/tablesdb/' + databaseId + '/tables/devices/rows', buildDeviceRegistration(userId, label));
   const token = await request('/users/' + encodeURIComponent(userId) + '/tokens', {
     length: 32,
     expire: 300,
@@ -46,10 +49,10 @@ try {
   console.log('Enrollment user ID:', userId);
   console.log('One-time token:', token.secret);
   console.log('Expires:', token.expire);
-  console.log('No SMS permissions granted. Clear the terminal after enrollment.');
+  console.log('Private device metadata registered. No SMS permissions granted. Clear the terminal after enrollment.');
 } catch (error) {
   console.error(error.message);
-  if (userId) console.error('Check this account in the console before retrying:', userId);
+  if (userId) console.error('Check this account and its device metadata row in the console before retrying:', userId);
   process.exitCode = 1;
 } finally {
   rl.close();
