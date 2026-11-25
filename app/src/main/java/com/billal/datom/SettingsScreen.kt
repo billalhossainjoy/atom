@@ -47,7 +47,8 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
     var fingerprint by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf(false) }
-    var sessionUser by remember { mutableStateOf<String?>(null) }
+    var sessionUser by remember { mutableStateOf(ConnectionTestQueue.approvedUser(context)) }
+    var approvedUser by remember { mutableStateOf(ConnectionTestQueue.approvedUser(context)) }
     var enrollmentUser by remember { mutableStateOf("") }
     var enrollmentSecret by remember { mutableStateOf("") }
     var sessionStatus by remember { mutableStateOf("") }
@@ -72,8 +73,9 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 DeviceEnrollment.removeLegacyApiKey(context)
                 DeviceEnrollment.fingerprint()
             }
-            sessionUser = runCatching { EnrollmentSession.currentUser(context) }.getOrNull()
-            sessionUser?.let { ConnectionTestQueue.enqueue(context, it) }
+            // A remembered account allows verification to be queued while offline.
+            sessionUser = approvedUser ?: runCatching { EnrollmentSession.currentUser(context) }.getOrNull()
+            ConnectionTestQueue.enqueueApproved(context)
         } catch (_: Exception) {
             error = true
         } finally {
@@ -135,9 +137,15 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             }) { Text("Reset local identity") }
         }
         if (sessionUser != null) {
-            Text("Appwrite session active")
+            Text(if (approvedUser == sessionUser) "Enrollment saved on this device" else "Appwrite session found")
             Text(sessionUser.orEmpty(), style = MaterialTheme.typography.bodySmall)
             Text("Cloud SMS sync is still off.")
+            if (approvedUser != sessionUser) {
+                Text("Allow automatic verification of your private device registration on launch and when queued work can reconnect. No SMS is uploaded.")
+                Button(enabled = !busy, onClick = {
+                    sessionUser?.let { ConnectionTestQueue.approve(context, it); approvedUser = it }
+                }) { Text("Allow automatic device verification") }
+            }
             Text("Device verification: " + when (testState) {
                 WorkInfo.State.ENQUEUED -> "Waiting for network or retry"
                 WorkInfo.State.RUNNING -> "Checking registration"
@@ -147,7 +155,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 WorkInfo.State.BLOCKED -> "Waiting"
                 null -> "Not checked"
             })
-            OutlinedButton(enabled = !busy && testState?.isFinished != false,
+            OutlinedButton(enabled = !busy && approvedUser == sessionUser && testState?.isFinished != false,
                 onClick = { sessionUser?.let { ConnectionTestQueue.enqueue(context, it) } }) {
                 Text("Check connection")
             }
@@ -155,12 +163,13 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 scope.launch {
                     busy = true
                     try {
-                        ConnectionTestQueue.cancel(context)
+                        ConnectionTestQueue.revoke(context)
+                        approvedUser = null
                         EnrollmentSession.disconnect(context)
                         sessionUser = null
                         sessionStatus = "Disconnected"
                     } catch (_: Exception) {
-                        sessionStatus = "Unable to disconnect. Retry when online."
+                        sessionStatus = "Automatic verification stopped locally. Session revocation needs internet; retry when online."
                     } finally {
                         busy = false
                     }
@@ -168,6 +177,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             }) { Text("Disconnect Appwrite session") }
         } else if (fingerprint != null) {
             Text("Enter the one-time credentials issued specifically for this device by your administrator. Do not enter an Appwrite server API key.")
+            Text("Connecting allows automatic verification of your private device registration. No SMS is uploaded. You can disconnect at any time.")
             OutlinedTextField(
                 value = enrollmentUser,
                 onValueChange = { enrollmentUser = it },
@@ -188,7 +198,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                         sessionStatus = ""
                         try {
                             sessionUser = EnrollmentSession.redeem(context, enrollmentUser, enrollmentSecret)
-                            sessionUser?.let { ConnectionTestQueue.enqueue(context, it) }
+                            sessionUser?.let { ConnectionTestQueue.approve(context, it); approvedUser = it }
                             sessionStatus = "Session connected. Device verification queued; SMS sync remains disabled."
                         } catch (_: Exception) {
                             sessionStatus = "Enrollment failed. Check the token, connection and account."
