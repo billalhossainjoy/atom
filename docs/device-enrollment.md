@@ -1,0 +1,36 @@
+# Device enrollment (administrator)
+
+Cloud SMS synchronization remains disabled. This procedure creates a dedicated Appwrite account and a short-lived sign-in token only. It does not grant access to any SMS table, upload content, or prove possession of the Android Keystore key.
+
+## Prerequisites
+
+- Node.js 20 or newer on a trusted administrator workstation.
+- In the Appwrite project console, create a separate enrollment API key with only the `users.write` scope. Do not reuse the database key. Do not put the key in the Android application, Git, shell history, or logs.
+- Verify the device owner's identity and obtain their explicit approval in person or over a trusted channel. The local app displays a public-key fingerprint; account enrollment is not yet cryptographically bound to it.
+
+## Provision an approved device
+
+In a private terminal on Fedora (Bash):
+
+```bash
+read -rsp 'Enrollment API key: ' APPWRITE_ENROLLMENT_KEY; echo
+export APPWRITE_ENROLLMENT_KEY
+node scripts/enroll-device.mjs
+unset APPWRITE_ENROLLMENT_KEY
+```
+
+Enter a device label and confirm owner approval. The script creates a fresh account and displays an enrollment user ID and a token expiring in five minutes. Transfer these credentials privately to the approved owner. On Android, open Settings, prepare the device identity, and enter the credentials under Cloud enrollment. Clear the private terminal afterwards. Never post the token in a GitHub issue or chat.
+
+## Revocation
+
+Disconnect the session in Android settings or revoke the account's sessions in Appwrite Console. Disable the dedicated account if the device is lost or approval is withdrawn. Keep the tables private; do not grant access to all authenticated users.
+
+## Remaining work before real data
+
+- Implement server-side verification of the prepared public key and device ownership.
+- Add explicit, separately revocable consent for the backup of selected content.
+- Enforce owner-scoped authorization server-side, including negative tests for cross-account access. Do not rely on the submitted device ID for authorization.
+- Verify the Android session flow and test a synthetic-data-only sync queue before enabling backup.
+- Define retention and deletion controls.
+
+Reference: https://appwrite.io/docs/products/auth/custom-token
