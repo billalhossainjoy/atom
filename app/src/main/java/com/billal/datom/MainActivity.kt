@@ -3,6 +3,10 @@ package com.billal.datom
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.provider.Telephony
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -32,6 +36,7 @@ import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffo
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -56,17 +61,14 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.billal.datom.appwrite.AppwriteConfig
-import com.billal.datom.appwrite.AppwriteSync
-import com.billal.datom.appwrite.NetworkMonitor
 import com.billal.datom.media.MediaImageStore
 import com.billal.datom.sms.SmsMessage
 import com.billal.datom.sms.SmsStore
 import com.billal.datom.ui.theme.DAtomTheme
 import java.text.DateFormat
 import java.util.Date
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -99,20 +101,6 @@ fun DAtomApp() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->
         hasSmsPermission = grants[Manifest.permission.READ_SMS] == true
-        if (hasSmsPermission) {
-            SmsStore.loadInbox(context)
-            scope.launch { AppwriteSync.syncAll(context) }
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        NetworkMonitor.start(context)
-        MediaImageStore.startObserving(context)
-        NetworkMonitor.online.collectLatest {
-            if (AppwriteConfig.isConfigured() && hasSmsPermission) {
-                AppwriteSync.syncAll(context)
-            }
-        }
     }
 
     LaunchedEffect(Unit) {
@@ -120,9 +108,29 @@ fun DAtomApp() {
             permissionLauncher.launch(
                 arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS)
             )
+        }
+    }
+
+    DisposableEffect(context, hasSmsPermission) {
+        if (!hasSmsPermission) {
+            SmsStore.replaceAll(emptyList())
+            onDispose { }
         } else {
-            SmsStore.loadInbox(context)
-            AppwriteSync.syncAll(context)
+            val resolver = context.contentResolver
+            var refreshJob: Job? = null
+            fun refresh() {
+                refreshJob?.cancel()
+                refreshJob = scope.launch { SmsStore.refreshInbox(context) }
+            }
+            val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+                override fun onChange(selfChange: Boolean) { refresh() }
+            }
+            resolver.registerContentObserver(Telephony.Sms.CONTENT_URI, true, observer)
+            refresh()
+            onDispose {
+                refreshJob?.cancel()
+                resolver.unregisterContentObserver(observer)
+            }
         }
     }
 
