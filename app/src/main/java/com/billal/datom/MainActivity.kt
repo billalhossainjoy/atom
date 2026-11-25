@@ -104,6 +104,7 @@ fun DAtomApp() {
     }
 
     LaunchedEffect(Unit) {
+        MediaImageStore.startObserving(context)
         if (!hasSmsPermission) {
             permissionLauncher.launch(
                 arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS)
