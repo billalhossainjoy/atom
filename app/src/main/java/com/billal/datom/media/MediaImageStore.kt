@@ -20,10 +20,13 @@ data class MediaImage(
     val id: Long,
     val uri: Uri,
     val dateTaken: Long,
+    val bucketName: String,
+    val isVideo: Boolean,
+    val durationMs: Long,
 )
 
 object MediaImageStore {
-    private const val MAX_IMAGES = 300
+    private const val MAX_ITEMS = 500
 
     private val _images = MutableStateFlow<List<MediaImage>>(emptyList())
     val images: StateFlow<List<MediaImage>> = _images.asStateFlow()
@@ -33,7 +36,7 @@ object MediaImageStore {
     @Volatile
     private var observing = false
 
-    /** Register a MediaStore observer so new camera photos appear automatically. */
+    /** Register a MediaStore observer so new photos/videos appear automatically. */
     fun startObserving(context: Context) {
         if (observing) return
         observing = true
@@ -46,7 +49,7 @@ object MediaImageStore {
             }
         }
         resolver.registerContentObserver(
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL),
             true,
             observer
         )
@@ -55,32 +58,46 @@ object MediaImageStore {
     fun load(context: Context) {
         val result = mutableListOf<MediaImage>()
         val projection = arrayOf(
-            MediaStore.Images.Media._ID,
-            MediaStore.Images.Media.DATE_TAKEN,
+            MediaStore.Files.FileColumns._ID,
+            MediaStore.Files.FileColumns.DATE_TAKEN,
+            MediaStore.Files.FileColumns.BUCKET_DISPLAY_NAME,
+            MediaStore.Files.FileColumns.MEDIA_TYPE,
+            MediaStore.Files.FileColumns.DURATION,
+        )
+        val selection = "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN (?, ?)"
+        val selectionArgs = arrayOf(
+            MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
+            MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString(),
         )
         try {
             context.contentResolver.query(
-                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL),
                 projection,
-                null,
-                null,
-                "${MediaStore.Images.Media.DATE_TAKEN} DESC"
+                selection,
+                selectionArgs,
+                "${MediaStore.Files.FileColumns.DATE_TAKEN} DESC"
             )?.use { cursor ->
-                val idCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
-                val dateCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
-                while (cursor.moveToNext() && result.size < MAX_IMAGES) {
+                val idCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
+                val dateCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DATE_TAKEN)
+                val bucketCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.BUCKET_DISPLAY_NAME)
+                val typeCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE)
+                val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DURATION)
+                while (cursor.moveToNext() && result.size < MAX_ITEMS) {
                     val id = cursor.getLong(idCol)
                     result += MediaImage(
                         id = id,
                         uri = ContentUris.withAppendedId(
-                            MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id
+                            MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL), id
                         ),
                         dateTaken = cursor.getLong(dateCol),
+                        bucketName = cursor.getString(bucketCol) ?: "",
+                        isVideo = cursor.getInt(typeCol) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO,
+                        durationMs = cursor.getLong(durationCol),
                     )
                 }
             }
         } catch (e: SecurityException) {
-            // Photo permission not granted yet
+            // Media permission not granted yet
         }
         _images.value = result
     }

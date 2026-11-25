@@ -3,6 +3,10 @@ package com.billal.datom
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.provider.Telephony
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -32,6 +36,7 @@ import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffo
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -48,6 +53,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import coil3.ImageLoader
+import coil3.SingletonImageLoader
+import coil3.video.VideoFrameDecoder
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -56,17 +64,14 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.billal.datom.appwrite.AppwriteConfig
-import com.billal.datom.appwrite.AppwriteSync
-import com.billal.datom.appwrite.NetworkMonitor
 import com.billal.datom.media.MediaImageStore
 import com.billal.datom.sms.SmsMessage
 import com.billal.datom.sms.SmsStore
 import com.billal.datom.ui.theme.DAtomTheme
 import java.text.DateFormat
 import java.util.Date
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -99,30 +104,37 @@ fun DAtomApp() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->
         hasSmsPermission = grants[Manifest.permission.READ_SMS] == true
-        if (hasSmsPermission) {
-            SmsStore.loadInbox(context)
-            scope.launch { AppwriteSync.syncAll(context) }
-        }
     }
 
     LaunchedEffect(Unit) {
-        NetworkMonitor.start(context)
         MediaImageStore.startObserving(context)
-        NetworkMonitor.online.collectLatest {
-            if (AppwriteConfig.isConfigured() && hasSmsPermission) {
-                AppwriteSync.syncAll(context)
-            }
-        }
-    }
-
-    LaunchedEffect(Unit) {
         if (!hasSmsPermission) {
             permissionLauncher.launch(
                 arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS)
             )
+        }
+    }
+
+    DisposableEffect(context, hasSmsPermission) {
+        if (!hasSmsPermission) {
+            SmsStore.replaceAll(emptyList())
+            onDispose { }
         } else {
-            SmsStore.loadInbox(context)
-            AppwriteSync.syncAll(context)
+            val resolver = context.contentResolver
+            var refreshJob: Job? = null
+            fun refresh() {
+                refreshJob?.cancel()
+                refreshJob = scope.launch { SmsStore.refreshInbox(context) }
+            }
+            val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+                override fun onChange(selfChange: Boolean) { refresh() }
+            }
+            resolver.registerContentObserver(Telephony.Sms.CONTENT_URI, true, observer)
+            refresh()
+            onDispose {
+                refreshJob?.cancel()
+                resolver.unregisterContentObserver(observer)
+            }
         }
     }
 
@@ -254,14 +266,12 @@ fun AppNavHost(navController: NavHostController, modifier: Modifier = Modifier) 
 fun GalleryDestination(navController: NavHostController) {
     val context = LocalContext.current
     LaunchedEffect(Unit) {
-        val permission = if (android.os.Build.VERSION.SDK_INT >= 33) {
-            Manifest.permission.READ_MEDIA_IMAGES
-        } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
+        SingletonImageLoader.setSafe {
+            ImageLoader.Builder(context)
+                .components { add(VideoFrameDecoder.Factory()) }
+                .build()
         }
-        if (ContextCompat.checkSelfPermission(context, permission) ==
-            PackageManager.PERMISSION_GRANTED
-        ) {
+        if (hasMediaPermission(context)) {
             MediaImageStore.startObserving(context)
             MediaImageStore.load(context)
         }

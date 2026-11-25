@@ -1,8 +1,9 @@
 package com.billal.datom.sms
 
 import android.content.Context
-import android.net.Uri
 import android.provider.Telephony
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,6 +32,17 @@ object SmsStore {
         _messages.value = readInbox(context)
     }
 
+    suspend fun refreshInbox(context: Context) {
+        val inbox = withContext(Dispatchers.IO) {
+            try {
+                readInbox(context)
+            } catch (_: SecurityException) {
+                emptyList()
+            }
+        }
+        _messages.value = inbox
+    }
+
     fun readInbox(context: Context): List<SmsMessage> {
         val messages = mutableListOf<SmsMessage>()
         context.contentResolver.query(
@@ -49,11 +61,11 @@ object SmsStore {
             val addrCol = cursor.getColumnIndexOrThrow(Telephony.Sms.ADDRESS)
             val bodyCol = cursor.getColumnIndexOrThrow(Telephony.Sms.BODY)
             val dateCol = cursor.getColumnIndexOrThrow(Telephony.Sms.DATE)
-            while (cursor.moveToNext() && messages.size < 100) {
+            while (cursor.moveToNext()) {
                 messages += SmsMessage(
                     id = cursor.getLong(idCol),
-                    sender = cursor.getString(addrCol),
-                    body = cursor.getString(bodyCol),
+                    sender = cursor.getString(addrCol).orEmpty(),
+                    body = cursor.getString(bodyCol).orEmpty(),
                     date = cursor.getLong(dateCol),
                 )
             }
