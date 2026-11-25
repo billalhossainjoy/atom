@@ -11,6 +11,9 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import io.appwrite.exceptions.AppwriteException
+import io.appwrite.Client
+import io.appwrite.services.Account
+import io.appwrite.services.TablesDB
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
 
@@ -24,9 +27,19 @@ class ConnectionTestWorker(context: Context, params: WorkerParameters) :
         val expectedUser = inputData.getString("expected_user")
             ?: return Result.failure()
         return try {
-            val current = EnrollmentSession.currentUser(applicationContext)
-            if (current != expectedUser) Result.failure()
-            else Result.success(workDataOf("test" to "session_verified"))
+            val client = Client(applicationContext)
+                .setEndpoint(AppwriteConfig.DEFAULT_ENDPOINT)
+                .setProject(AppwriteConfig.DEFAULT_PROJECT_ID)
+            val current = Account(client).get().id
+            if (current != expectedUser) return Result.failure()
+            val row = TablesDB(client).getRow(
+                databaseId = AppwriteConfig.DEFAULT_DATABASE_ID,
+                tableId = AppwriteConfig.TABLE_DEVICES,
+                rowId = current
+            )
+            if (row.id != current || row.data?.get("deviceId") != current) {
+                Result.failure()
+            } else Result.success(workDataOf("test" to "device_verified"))
         } catch (e: CancellationException) {
             throw e
         } catch (e: AppwriteException) {
