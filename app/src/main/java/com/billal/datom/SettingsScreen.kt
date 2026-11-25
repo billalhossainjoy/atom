@@ -1,5 +1,9 @@
 package com.billal.datom
 
+import android.os.Build
+import android.provider.Settings
+import java.security.MessageDigest
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -43,6 +47,13 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
     var enrollmentUser by remember { mutableStateOf("") }
     var enrollmentSecret by remember { mutableStateOf("") }
     var sessionStatus by remember { mutableStateOf("") }
+    val deviceReference = remember(context) {
+        Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { id -> MessageDigest.getInstance("SHA-256")
+                .digest(("datom-device-v1:" + id).toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(it.toInt() and 0xff) } }
+    }
 
     LaunchedEffect(Unit) {
         try {
@@ -62,7 +73,13 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Settings", style = MaterialTheme.typography.headlineMedium)
+        Text("Cloud connection & privacy", style = MaterialTheme.typography.headlineMedium)
+        Text("This device", style = MaterialTheme.typography.titleMedium)
+        Text(Build.MANUFACTURER + " " + Build.MODEL)
+        Text("Android " + Build.VERSION.RELEASE + " · SDK " + Build.VERSION.SDK_INT)
+        Text("Local device reference", style = MaterialTheme.typography.labelMedium)
+        Text(deviceReference ?: "Unavailable", style = MaterialTheme.typography.bodySmall)
+        Text("The reference is derived from Android ID and stays on this device. It is not an authentication credential.", style = MaterialTheme.typography.bodySmall)
         Text("Local inbox", style = MaterialTheme.typography.titleMedium)
         Text("Messages remain on this device and available offline.")
         Text("Cloud enrollment", style = MaterialTheme.typography.titleMedium)
