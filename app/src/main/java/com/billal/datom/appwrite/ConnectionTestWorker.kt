@@ -30,7 +30,7 @@ class ConnectionTestWorker(context: Context, params: WorkerParameters) :
         } catch (e: CancellationException) {
             throw e
         } catch (e: AppwriteException) {
-            if ((e.code == 429 || e.code >= 500) && runAttemptCount < 4) {
+            if ((e.code == 429 || (e.code ?: 0) >= 500) && runAttemptCount < 4) {
                 Result.retry()
             } else Result.failure()
         } catch (e: Exception) {
