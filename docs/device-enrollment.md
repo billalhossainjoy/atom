@@ -33,6 +33,29 @@ node --test scripts/device-access.test.mjs
 
 These tests validate the generated ACL, not live Appwrite enforcement. The existing tables must keep row security enabled and table-level permissions empty. No SMS or conversation permissions are granted. Verify cross-account denial using synthetic test records before any production use.
 
+## Link an approved device to the web dashboard
+
+The owner first signs in at https://datom-dashboard.vercel.app using their own Google account. Verify their identity and obtain their explicit approval to link the device. Find the corresponding verified Appwrite user ID in the project Auth console. Do not treat an Android ID or device label as proof of ownership.
+
+Use a separate administrator-only key with `users.read`, `rows.read` and `rows.write` for this operation. Run in a private terminal:
+
+```bash
+read -rsp 'Administrator API key: ' APPWRITE_ENROLLMENT_KEY; echo
+export APPWRITE_ENROLLMENT_KEY
+node scripts/link-device-owner.mjs
+unset APPWRITE_ENROLLMENT_KEY
+```
+
+Select `link`, provide the dedicated device account ID and the verified owner account ID, then confirm approval. Refresh the dashboard to see the private device metadata. Select `unlink` to remove the owner's metadata access without removing the device account's access.
+
+This grants only read permission on one existing device metadata row. No SMS or conversation permissions are changed. The script rejects unexpected ACLs and assumes a single owner per device. Run administrator changes serially. The registration recovery utility intentionally rejects existing rows with additional ACLs; do not overwrite those permissions.
+
+Test the permission rules:
+
+```bash
+node --test scripts/*.test.mjs
+```
+
 ## Remaining work before real data
 
 - Implement server-side verification of the prepared public key and device ownership.
