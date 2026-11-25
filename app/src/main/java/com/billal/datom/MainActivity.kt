@@ -26,8 +26,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -188,7 +188,6 @@ enum class AppDestinations(
 ) {
     HOME("home", "Home", Icons.Filled.Home),
     GALLERY("gallery", "Gallery", Icons.Filled.PhotoLibrary),
-    SETTINGS("settings", "Settings", Icons.Filled.Settings),
 }
 
 @Composable
@@ -202,7 +201,8 @@ fun AppNavHost(navController: NavHostController, modifier: Modifier = Modifier) 
             HomeScreen(
                 onMessageClick = { (id) ->
                     navController.navigate("sms/$id")
-                }
+                },
+                onCloudClick = { navController.navigate("cloud-setup") }
             )
         }
         composable(
@@ -256,8 +256,13 @@ fun AppNavHost(navController: NavHostController, modifier: Modifier = Modifier) 
                 }
             }
         }
-        composable(AppDestinations.SETTINGS.route) {
-            SettingsScreen()
+        composable("cloud-setup") {
+            Column(modifier = Modifier.fillMaxSize()) {
+                IconButton(onClick = { navController.popBackStack() }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+                SettingsScreen()
+            }
         }
     }
 }
@@ -282,12 +287,16 @@ fun GalleryDestination(navController: NavHostController) {
 @Composable
 fun HomeScreen(
     onMessageClick: (SmsMessage) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onCloudClick: (() -> Unit)? = null,
 ) {
     val messages by SmsStore.messages.collectAsState()
 
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
         Text("Messages", style = MaterialTheme.typography.headlineMedium)
+        if (onCloudClick != null) {
+            OutlinedButton(onClick = onCloudClick) { Text("Cloud connection & privacy") }
+        }
         HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
         if (messages.isEmpty()) {
