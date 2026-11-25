@@ -65,6 +65,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.billal.datom.media.MediaImageStore
+import com.billal.datom.appwrite.ConnectionTestQueue
+import com.billal.datom.appwrite.DeviceEnrollment
 import com.billal.datom.sms.SmsMessage
 import com.billal.datom.sms.SmsStore
 import com.billal.datom.ui.theme.DAtomTheme
@@ -76,6 +78,8 @@ import kotlinx.coroutines.Job
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        DeviceEnrollment.removeLegacyApiKey(applicationContext)
+        ConnectionTestQueue.enqueueApproved(applicationContext)
         enableEdgeToEdge()
         setContent {
             DAtomTheme {
