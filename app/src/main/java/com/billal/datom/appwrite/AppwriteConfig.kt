@@ -45,6 +45,13 @@ object AppwriteConfig {
         tableId = p.stringOrDefault(KEY_TABLE_ID, DEFAULT_TABLE_ID)
     }
 
+    fun saveApiKey(context: Context, apiKey: String) {
+        val p = context.applicationContext
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        p.edit().putString(KEY_API_KEY, apiKey.trim()).apply()
+        load(context)
+    }
+
     fun save(
         context: Context,
         endpoint: String,

@@ -63,6 +63,8 @@ fun GalleryScreen(
     }
 
     val images by MediaImageStore.images.collectAsState()
+    val dayAgo = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
+    val recentImages = images.filter { it.dateTaken >= dayAgo }
 
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
         Text("Gallery", style = MaterialTheme.typography.headlineMedium)
@@ -82,9 +84,9 @@ fun GalleryScreen(
                     modifier = Modifier.padding(top = 16.dp)
                 ) { Text("Grant access") }
             }
-        } else if (images.isEmpty()) {
+        } else if (recentImages.isEmpty()) {
             Text(
-                "No images found.",
+                "No recently captured images.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 16.dp)
             )
@@ -95,7 +97,14 @@ fun GalleryScreen(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier.padding(top = 12.dp)
             ) {
-                items(images, key = { it.id }) { image ->
+                item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(3) }) {
+                    Text(
+                        "Captured in the last 24 hours",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                }
+                items(recentImages, key = { it.id }) { image ->
                     AsyncImage(
                         model = image.uri,
                         contentDescription = null,

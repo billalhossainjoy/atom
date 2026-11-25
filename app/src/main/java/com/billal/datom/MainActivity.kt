@@ -20,9 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
@@ -109,6 +107,7 @@ fun DAtomApp() {
 
     LaunchedEffect(Unit) {
         NetworkMonitor.start(context)
+        MediaImageStore.startObserving(context)
         NetworkMonitor.online.collectLatest {
             if (AppwriteConfig.isConfigured() && hasSmsPermission) {
                 AppwriteSync.syncAll(context)
@@ -176,8 +175,6 @@ enum class AppDestinations(
     val icon: ImageVector,
 ) {
     HOME("home", "Home", Icons.Filled.Home),
-    FAVORITES("favorites", "Favorites", Icons.Filled.Favorite),
-    PROFILE("profile", "Profile", Icons.Filled.Person),
     GALLERY("gallery", "Gallery", Icons.Filled.PhotoLibrary),
     SETTINGS("settings", "Settings", Icons.Filled.Settings),
 }
@@ -219,12 +216,6 @@ fun AppNavHost(navController: NavHostController, modifier: Modifier = Modifier) 
                     Text("Message not found")
                 }
             }
-        }
-        composable(AppDestinations.FAVORITES.route) {
-            PlaceholderScreen("Favorites")
-        }
-        composable(AppDestinations.PROFILE.route) {
-            PlaceholderScreen("Profile")
         }
         composable(AppDestinations.GALLERY.route) {
             GalleryDestination(navController)
@@ -358,18 +349,6 @@ fun SmsDetailScreen(
             modifier = Modifier.padding(bottom = 16.dp)
         )
         Text(message.body, style = MaterialTheme.typography.bodyLarge)
-    }
-}
-
-@Composable
-fun PlaceholderScreen(title: String, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(title, style = MaterialTheme.typography.headlineMedium)
-        Text("Coming soon", color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
