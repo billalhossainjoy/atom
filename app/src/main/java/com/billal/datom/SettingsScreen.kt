@@ -18,6 +18,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.work.WorkManager
+import androidx.work.WorkInfo
+import com.billal.datom.appwrite.ConnectionTestQueue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +51,13 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
     var enrollmentUser by remember { mutableStateOf("") }
     var enrollmentSecret by remember { mutableStateOf("") }
     var sessionStatus by remember { mutableStateOf("") }
+    val workFlow = remember(context) {
+        WorkManager.getInstance(context.applicationContext)
+            .getWorkInfosForUniqueWorkFlow(ConnectionTestQueue.NAME)
+    }
+    val workInfos by workFlow.collectAsState(initial = emptyList())
+    val testState = workInfos.firstOrNull { !it.state.isFinished }?.state
+        ?: workInfos.firstOrNull()?.state
     val deviceReference = remember(context) {
         Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
             ?.takeIf { it.isNotBlank() }
@@ -62,6 +73,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 DeviceEnrollment.fingerprint()
             }
             sessionUser = runCatching { EnrollmentSession.currentUser(context) }.getOrNull()
+            sessionUser?.let { ConnectionTestQueue.enqueue(context, it) }
         } catch (_: Exception) {
             error = true
         } finally {
@@ -126,10 +138,24 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             Text("Appwrite session active")
             Text(sessionUser.orEmpty(), style = MaterialTheme.typography.bodySmall)
             Text("Cloud SMS sync is still off.")
+            Text("Device verification: " + when (testState) {
+                WorkInfo.State.ENQUEUED -> "Waiting for network or retry"
+                WorkInfo.State.RUNNING -> "Checking registration"
+                WorkInfo.State.SUCCEEDED -> "Last check succeeded"
+                WorkInfo.State.FAILED -> "Registration not verified"
+                WorkInfo.State.CANCELLED -> "Cancelled"
+                WorkInfo.State.BLOCKED -> "Waiting"
+                null -> "Not checked"
+            })
+            OutlinedButton(enabled = !busy && testState?.isFinished != false,
+                onClick = { sessionUser?.let { ConnectionTestQueue.enqueue(context, it) } }) {
+                Text("Check connection")
+            }
             OutlinedButton(enabled = !busy, onClick = {
                 scope.launch {
                     busy = true
                     try {
+                        ConnectionTestQueue.cancel(context)
                         EnrollmentSession.disconnect(context)
                         sessionUser = null
                         sessionStatus = "Disconnected"
@@ -162,7 +188,8 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                         sessionStatus = ""
                         try {
                             sessionUser = EnrollmentSession.redeem(context, enrollmentUser, enrollmentSecret)
-                            sessionStatus = "Session connected. SMS sync remains disabled."
+                            sessionUser?.let { ConnectionTestQueue.enqueue(context, it) }
+                            sessionStatus = "Session connected. Device verification queued; SMS sync remains disabled."
                         } catch (_: Exception) {
                             sessionStatus = "Enrollment failed. Check the token, connection and account."
                         } finally {
