@@ -46,6 +46,7 @@ dependencies {
     implementation(libs.appwrite.sdk)
     implementation(libs.androidx.work.runtime)
     implementation(libs.coil.compose)
+    implementation(libs.coil.video)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)

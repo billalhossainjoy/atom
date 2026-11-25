@@ -53,6 +53,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import coil3.ImageLoader
+import coil3.SingletonImageLoader
+import coil3.video.VideoFrameDecoder
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -263,14 +266,12 @@ fun AppNavHost(navController: NavHostController, modifier: Modifier = Modifier) 
 fun GalleryDestination(navController: NavHostController) {
     val context = LocalContext.current
     LaunchedEffect(Unit) {
-        val permission = if (android.os.Build.VERSION.SDK_INT >= 33) {
-            Manifest.permission.READ_MEDIA_IMAGES
-        } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
+        SingletonImageLoader.setSafe {
+            ImageLoader.Builder(context)
+                .components { add(VideoFrameDecoder.Factory()) }
+                .build()
         }
-        if (ContextCompat.checkSelfPermission(context, permission) ==
-            PackageManager.PERMISSION_GRANTED
-        ) {
+        if (hasMediaPermission(context)) {
             MediaImageStore.startObserving(context)
             MediaImageStore.load(context)
         }
